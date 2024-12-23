@@ -17,6 +17,11 @@ pip install -e .
 playwright install --with-deps chromium
 ```
 
+- graphviz
+```shell
+sudo apt install graphviz
+```
+
 ## Configuration
 - .env
 ```python
