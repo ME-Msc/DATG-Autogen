@@ -1,3 +1,5 @@
 .env
-logs
+log.jsonl
 TaskGraph.png
+__pycache__/
+*.py[cod]

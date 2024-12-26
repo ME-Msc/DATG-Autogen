@@ -5,12 +5,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "example.py",
+            "name": "main.py",
             "type": "debugpy",
             "request": "launch",
-            "program": "/sandbox/example.py",
-            "console": "integratedTerminal",
-            "args": "--logs_dir ./logs"
+            "program": "main.py",
+            "console": "integratedTerminal"
         }
     ]
 }
