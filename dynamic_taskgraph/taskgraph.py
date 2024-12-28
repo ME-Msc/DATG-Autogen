@@ -5,13 +5,13 @@ from typing import List, Tuple
 import matplotlib.pyplot as plt
 import networkx as nx
 
-from dynamic_taskgraph.task import Task
+from dynamic_taskgraph.task import AlphaTask, OmegaTask, Task
 
 
 class TaskGraphNode:
     """Class representing a node in the TaskGraph."""
 
-    def __init__(self, task: Task):
+    def __init__(self, task: Task | AlphaTask | OmegaTask):
         self.task: Task = task
         self.out_edges: set[str] = set()  # Nodes this node points to
         self.in_edges: set[str] = set()  # Nodes pointing to this node
@@ -25,6 +25,7 @@ class TaskGraph:
 
     def __init__(self):
         self.graph: OrderedDict[str, TaskGraphNode] = OrderedDict()
+        self.node_count = 0
 
     def reset_graph(self) -> None:
         """Restore the graph to an empty state."""
@@ -32,9 +33,12 @@ class TaskGraph:
 
     def add_node(self, task: Task) -> None:
         """Add a node if it does not exist yet."""
+        if task.name is None:
+            raise ValueError("Task name cannot be None")
         if task.name in self.graph:
             raise KeyError(f"Node {task.name} already exists")
         self.graph[task.name] = TaskGraphNode(task)
+        self.node_count += 1
 
     def delete_node(self, task: Task) -> None:
         """Delete a node and all edges referencing it."""
@@ -50,6 +54,7 @@ class TaskGraph:
             self.graph[successor].in_edges.remove(task.name)
         # Remove the node itself
         del self.graph[task.name]
+        self.node_count -= 1
 
     def add_edge(self, from_task: Task, to_task: Task) -> None:
         """Add an edge (dependency) between the specified nodes."""
@@ -166,3 +171,43 @@ class TaskGraph:
 
     def __repr__(self) -> str:
         return f"TaskGraph({list(self.graph.values())})"
+
+    async def run(self):
+        input_dict: OrderedDict[str, str] = OrderedDict()  # task_name: task_input
+        for i in range(2):
+            waiting_list: List[str] = self.topological_sort()
+            if self.node_count == 2:  # initial first_task
+                self.visualize(filename=f"TaskGraph_{i}.png")
+
+                alpha_task_name = waiting_list[0]
+                alpha_task: AlphaTask = self.graph[alpha_task_name].task
+
+                omega_task_name = waiting_list[-1]
+                omega_task: OmegaTask = self.graph[omega_task_name].task
+                alpha_task_output, first_task_name = await alpha_task.start()
+
+                input_dict[omega_task_name] = alpha_task_output
+
+                first_task = Task(name=first_task_name)
+                self.add_node(task=first_task)
+                self.add_edge(from_task=alpha_task, to_task=first_task)
+                self.add_edge(from_task=first_task, to_task=omega_task)
+                self.delete_edge(from_task=alpha_task, to_task=omega_task)
+                input_dict[first_task_name] = alpha_task_output
+            else:  # alpha_task -> first_task -> ...... -> omega_task
+                for current_task_name in waiting_list:
+                    current_task = self.graph[current_task_name].task
+                    if isinstance(current_task, AlphaTask):
+                        continue
+                    try:
+                        current_task_input = input_dict[current_task_name]
+                    except KeyError:
+                        raise KeyError(f"Task {current_task_name} has no input.")
+
+                    current_task_output, _ = await current_task.start(
+                        task_input=current_task_input
+                    )
+                    for successor_task_name in self.graph[current_task_name].out_edges:
+                        input_dict[successor_task_name] = current_task_output
+                print(f"TaskGraph round {i} execution completed.")
+                self.visualize(filename=f"TaskGraph_{i}.png")

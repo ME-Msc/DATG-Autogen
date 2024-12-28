@@ -1,15 +1,21 @@
-# import asyncio
-# import logging
+import asyncio
+import logging
 
-# from autogen_core import EVENT_LOGGER_NAME
-# from autogen_magentic_one.utils import LogHandler
+from autogen_core import EVENT_LOGGER_NAME
+from autogen_magentic_one.utils import LogHandler
 
-from dynamic_taskgraph.task import Task
+from dynamic_taskgraph.task import AlphaTask, OmegaTask, Task
+from dynamic_taskgraph.taskgraph import TaskGraph
 
 
 async def main():
-    test_task = Task()  # TODO: TaskGraph
-    await test_task.start()
+    task_graph = TaskGraph()
+    alpha_task = AlphaTask()
+    omega_task = OmegaTask()
+    task_graph.add_node(task=alpha_task)
+    task_graph.add_node(task=omega_task)
+    task_graph.add_edge(from_task=alpha_task, to_task=omega_task)
+    await task_graph.run()
 
 
 def test_taskGraph():
@@ -38,10 +44,8 @@ def test_taskGraph():
 
 
 if __name__ == "__main__":
-    # logger = logging.getLogger(EVENT_LOGGER_NAME)
-    # logger.setLevel(logging.INFO)
-    # log_handler = LogHandler()
-    # logger.handlers = [log_handler]
-    # asyncio.run(main())
-
-    test_taskGraph()
+    logger = logging.getLogger(EVENT_LOGGER_NAME)
+    logger.setLevel(logging.INFO)
+    log_handler = LogHandler()
+    logger.handlers = [log_handler]
+    asyncio.run(main())

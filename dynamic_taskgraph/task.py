@@ -1,16 +1,16 @@
-from typing import List, Optional
+import asyncio
+from typing import List, Optional, Tuple
 
 from autogen_core import (
     AgentId,
     AgentProxy,
+    DefaultTopicId,
     SingleThreadedAgentRuntime,
 )
+from autogen_core.models import UserMessage
 from autogen_core.tools import BaseToolWithState
 from autogen_magentic_one.agents.orchestrator import RoundRobinOrchestrator
-from autogen_magentic_one.agents.user_proxy import UserProxy
-from autogen_magentic_one.messages import (
-    RequestReplyMessage,
-)
+from autogen_magentic_one.messages import BroadcastMessage
 from autogen_magentic_one.utils import create_completion_client_from_env
 from pydantic import (
     BaseModel,
@@ -19,6 +19,50 @@ from pydantic import (
 
 from dynamic_taskgraph.agent.actor import Actor
 from dynamic_taskgraph.agent.allocator import Allocator
+from dynamic_taskgraph.prompts.task_prompts import ALPHA_TASK_SYSTEM_MESSAGES
+
+
+class AlphaTask(BaseModel):  # | GenesisTask
+    """Virtual Task for processing input of Task Graph."""
+
+    name: str = "alpha_task"
+    description: str = "Virtual Task for processing input of Task Graph."
+    task_output: Optional[Tuple[str, str | None]] = Field(
+        description="tuple(user input, summary of user input as default task name)",
+        default=None,
+    )  # TODO: unify the type of task_output for all tasks
+
+    async def start(self) -> Tuple[str, str]:
+        try:
+            user_input = await asyncio.to_thread(input, "User input ('exit' to quit): ")
+            user_input = user_input.strip()
+            if user_input == "exit":
+                raise asyncio.CancelledError()
+            client = create_completion_client_from_env()
+            default_taskname = await client.create(
+                messages=ALPHA_TASK_SYSTEM_MESSAGES
+                + [UserMessage(content=user_input, source="UserProxy")]
+            )
+            assert isinstance(default_taskname.content, str)
+            self.task_output = user_input, default_taskname.content
+            return self.task_output
+        except asyncio.CancelledError:
+            print("Task has been cancelled.")
+
+
+class OmegaTask(BaseModel):
+    """Virtual Task for processing output of Task Graph."""
+
+    name: str = "omega_task"
+    description: str = "Virtual Task for processing output of Task Graph."
+    task_output: Optional[str] = Field(description="task graph output", default=None)
+
+    async def start(self, task_input: str) -> Tuple[str, str | None]:
+        self.task_output = task_input
+        print(
+            f"{self.name} task completed. Its output is: {self.task_output}. It is the final task."
+        )
+        return self.task_output, None
 
 
 class Task(BaseModel):
@@ -42,19 +86,9 @@ class Task(BaseModel):
         default_factory=list,
     )
 
-    async def start(self) -> str:
+    async def start(self, task_input: str) -> str:
         runtime = SingleThreadedAgentRuntime()
         client = create_completion_client_from_env()
-
-        # user_input_agent
-        await UserProxy.register(
-            runtime=runtime,
-            type="UserProxy",
-            factory=lambda: UserProxy(
-                description="The current user interacting with you."
-            ),
-        )
-        user_proxy = AgentProxy(AgentId("UserProxy", "default"), runtime)
 
         # actor
         await Actor.register(
@@ -85,7 +119,18 @@ class Task(BaseModel):
         )
 
         runtime.start()
-        await runtime.send_message(RequestReplyMessage(), user_proxy.id)
+
+        self.task_input = task_input
+        await runtime.publish_message(
+            BroadcastMessage(
+                content=UserMessage(content=self.task_input, source="UserProxy")
+            ),
+            topic_id=DefaultTopicId(),
+        )
         await runtime.stop_when_idle()
-        self.task_output = self.allocator.get_final_result()
+        self.task_output = (
+            self.actor.get_final_result(),
+            self.allocator.get_final_result(),
+        )
         print(f"{self.name} task completed.")
+        return self.task_output

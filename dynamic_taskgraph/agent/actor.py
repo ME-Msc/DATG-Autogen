@@ -42,3 +42,6 @@ class Actor(BaseWorker):
             return "TERMINATE" in response.content, response.content
         else:
             return False, response.content
+
+    def get_final_result(self):
+        return self._chat_history[-1].content
