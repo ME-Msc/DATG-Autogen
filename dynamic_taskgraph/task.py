@@ -30,7 +30,7 @@ class Task(BaseModel):
     name: str = Field(default=None)
     description: str = Field(default=None)
     task_input: str = Field(default=None)  # TODO: List[str] for parallel tasks
-    expected_output: Optional[str] = Field(default=None)
+    task_output: Optional[str] = Field(default=None)
     allocator: Allocator = Field(default=None)
     actor: Actor = Field(default=None)
     tools: Optional[List[BaseToolWithState]] = Field(
@@ -87,5 +87,5 @@ class Task(BaseModel):
         runtime.start()
         await runtime.send_message(RequestReplyMessage(), user_proxy.id)
         await runtime.stop_when_idle()
-        print("Task completed.")
-        print("Task output:", self.allocator.get_final_result())
+        self.task_output = self.allocator.get_final_result()
+        print(f"{self.name} task completed.")
