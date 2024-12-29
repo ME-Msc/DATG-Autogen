@@ -1,3 +1,4 @@
+import os
 from collections import OrderedDict, defaultdict
 from copy import deepcopy
 from typing import List, Tuple
@@ -142,7 +143,7 @@ class TaskGraph:
             if node_name in nodes_seen_names
         ]
 
-    def visualize(self, filename: str = "TaskGraph.png") -> None:
+    def visualize(self, filename: str = "figures/TaskGraph.png") -> None:
         """Visualize the graph using matplotlib and networkx."""
         G = nx.DiGraph()
 
@@ -155,16 +156,25 @@ class TaskGraph:
         # Use graphviz_layout for left-to-right directed graph layout
         pos = nx.nx_pydot.graphviz_layout(G, prog="dot")
         plt.figure(figsize=(10, 6))
-        nx.draw(
-            G,
-            pos,
-            labels=labels,
-            node_size=2000,
-            node_color="skyblue",
-            font_size=12,
-            font_weight="bold",
-            arrowsize=20,
-        )
+
+        # Draw nodes with custom size and shape
+        for node_name, (x, y) in pos.items():
+            label = labels[node_name]
+            plt.text(
+                x,
+                y,
+                label,
+                ha="center",
+                va="center",
+                bbox=dict(
+                    boxstyle="round,pad=0.3", edgecolor="black", facecolor="skyblue"
+                ),
+            )
+
+        nx.draw_networkx_edges(G, pos, arrows=True, arrowsize=20)
+
+        # Check if the directory exists, if not, create it
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
 
         plt.savefig(filename)  # Save the visualization as a file
         plt.close()
@@ -172,12 +182,12 @@ class TaskGraph:
     def __repr__(self) -> str:
         return f"TaskGraph({list(self.graph.values())})"
 
-    async def run(self):
+    async def run(self, max_rounds: int = 2) -> None:
         input_dict: OrderedDict[str, str] = OrderedDict()  # task_name: task_input
-        for i in range(2):
+        for i in range(max_rounds):
             waiting_list: List[str] = self.topological_sort()
             if self.node_count == 2:  # initial first_task
-                self.visualize(filename=f"TaskGraph_{i}.png")
+                self.visualize(filename=f"figures/TaskGraph_{i}.png")
 
                 alpha_task_name = waiting_list[0]
                 alpha_task: AlphaTask = self.graph[alpha_task_name].task
