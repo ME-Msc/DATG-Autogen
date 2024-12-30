@@ -189,14 +189,12 @@ class TaskGraph:
         for i in range(max_rounds):
             waiting_list: List[str] = self.topological_sort()
             if self.node_count == 2:  # initial first_task
-                self.visualize(filename=f"figures/TaskGraph_{i}.png")
-
                 alpha_task_name = waiting_list[0]
                 alpha_task: AlphaTask = self.graph[alpha_task_name].task
 
                 omega_task_name = waiting_list[-1]
                 omega_task: OmegaTask = self.graph[omega_task_name].task
-                alpha_task_output, first_task_name, _ = await alpha_task.start()
+                alpha_task_output, first_task_name, _ = await alpha_task.start() # FIXME
 
                 input_dict[omega_task_name] = alpha_task_output
 
@@ -218,8 +216,9 @@ class TaskGraph:
 
                     current_task_output, _, _ = await current_task.start(
                         task_input=current_task_input
-                    )
+                    ) # FIXME
                     for successor_task_name in self.graph[current_task_name].out_edges:
                         input_dict[successor_task_name] = current_task_output
                 print(f"TaskGraph round {i} execution completed.")
-                self.visualize(filename=f"TaskGraph_{i}.png")
+
+            self.visualize(filename=f"figures/TaskGraph_{i}.png")
