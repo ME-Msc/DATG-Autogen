@@ -188,22 +188,26 @@ class TaskGraph:
         input_dict: OrderedDict[str, str] = OrderedDict()  # task_name: task_input
         for i in range(max_rounds):
             waiting_list: List[str] = self.topological_sort()
+            self.visualize(filename=f"figures/TaskGraph_{i}.png")
             if self.node_count == 2:  # initial first_task
                 alpha_task_name = waiting_list[0]
                 alpha_task: AlphaTask = self.graph[alpha_task_name].task
 
                 omega_task_name = waiting_list[-1]
                 omega_task: OmegaTask = self.graph[omega_task_name].task
-                alpha_task_output, first_task_name, _ = await alpha_task.start() # FIXME
+                alpha_task_output = await alpha_task.start()
+                first_task_input, first_task_name = alpha_task_output.content
 
-                input_dict[omega_task_name] = alpha_task_output
+                input_dict[omega_task_name] = (
+                    first_task_input  # will be override in next round
+                )
 
                 first_task = Task(name=first_task_name)
                 self.add_node(task=first_task)
                 self.add_edge(from_task=alpha_task, to_task=first_task)
                 self.add_edge(from_task=first_task, to_task=omega_task)
                 self.delete_edge(from_task=alpha_task, to_task=omega_task)
-                input_dict[first_task_name] = alpha_task_output
+                input_dict[first_task_name] = first_task_input
             else:  # alpha_task -> first_task -> ...... -> omega_task
                 for current_task_name in waiting_list:
                     current_task = self.graph[current_task_name].task
@@ -214,11 +218,22 @@ class TaskGraph:
                     except KeyError:
                         raise KeyError(f"Task {current_task_name} has no input.")
 
-                    current_task_output, _, _ = await current_task.start(
+                    current_task_output = await current_task.start(
                         task_input=current_task_input
-                    ) # FIXME
-                    for successor_task_name in self.graph[current_task_name].out_edges:
-                        input_dict[successor_task_name] = current_task_output
-                print(f"TaskGraph round {i} execution completed.")
+                    )
+                    if isinstance(current_task_output.task_type, AlphaTask):
+                        successor_task_input = current_task_output.content[0]
+                        # user_input
+                    elif isinstance(current_task_output.task_type, Task):
+                        successor_task_input = (
+                            current_task_output.content[0]
+                            + current_task_output.content[1]
+                        )
+                        # actor.get_final_result() + allocator.get_final_result()  # str + str
+                    elif isinstance(current_task_output.task_type, OmegaTask):
+                        successor_task_input = current_task_output.content[0]
+                        # Omega_task_input # str, in fact there is no successor_task any more.
 
-            self.visualize(filename=f"figures/TaskGraph_{i}.png")
+                    for successor_task_name in self.graph[current_task_name].out_edges:
+                        input_dict[successor_task_name] = successor_task_input
+                print(f"TaskGraph round {i} execution completed.")

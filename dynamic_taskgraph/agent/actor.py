@@ -44,4 +44,10 @@ class Actor(BaseWorker):
             return False, response.content
 
     def get_final_result(self):
-        return self._chat_history[-1].content
+        # FIXME: when call get_final_result function,
+        # the actor has received the BroadcastMessage from allocator,
+        # the message has been push into self._chat_history[-1],
+        # so the result of actor at the position of -2.
+        # The Only way to fix it, is change the communication type
+        # from Broadcast to Direct Messaging.
+        return self._chat_history[-2].content

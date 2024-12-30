@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import asyncio
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Union
 
 from autogen_core import (
     AgentId,
@@ -22,29 +24,46 @@ from dynamic_taskgraph.agent.allocator import Allocator
 from dynamic_taskgraph.prompts.task_prompts import ALPHA_TASK_SYSTEM_MESSAGES
 
 
+class TaskOutput(BaseModel):
+    task_type: Union[AlphaTask, OmegaTask, Task]
+    content: Any
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __init__(self, task_type: Union[AlphaTask, OmegaTask, Task], content: Any):
+        super().__init__(task_type=task_type, content=content)
+
+
 class AlphaTask(BaseModel):  # | GenesisTask
     """Virtual Task for processing input of Task Graph."""
 
     name: str = "alpha_task"
     description: str = "Virtual Task for processing input of Task Graph."
-    task_output: Optional[Tuple[str, str | None, dict | None]] = Field(
-        description="tuple(user input, summary of user input as default task name)",
+    task_output: Optional[TaskOutput] = Field(
+        description="""content = (
+                                    user input, # str
+                                    summary of user input as first task name # str
+                                )
+                    """,
         default=None,
-    )  # TODO: unify the type of task_output for all tasks
+    )
 
-    async def start(self) -> Tuple[str, str, dict | None]:
+    async def start(self) -> TaskOutput:
         try:
             user_input = await asyncio.to_thread(input, "User input ('exit' to quit): ")
             user_input = user_input.strip()
             if user_input == "exit":
                 raise asyncio.CancelledError()
             client = create_completion_client_from_env()
-            default_taskname = await client.create(
+            first_taskname = await client.create(
                 messages=ALPHA_TASK_SYSTEM_MESSAGES
                 + [UserMessage(content=user_input, source="UserProxy")]
             )
-            assert isinstance(default_taskname.content, str)
-            self.task_output = user_input, default_taskname.content, None
+            assert isinstance(first_taskname.content, str)
+            self.task_output = TaskOutput(
+                task_type=self, content=(user_input, first_taskname.content)
+            )
             return self.task_output
         except asyncio.CancelledError:
             print("Task has been cancelled.")
@@ -55,16 +74,19 @@ class OmegaTask(BaseModel):
 
     name: str = "omega_task"
     description: str = "Virtual Task for processing output of Task Graph."
-    task_output: Optional[Tuple[str, str | None, dict | None]] = Field(
-        description="task graph output", default=None
+    task_output: Optional[TaskOutput] = Field(
+        description="content = (task_input, )", default=None
     )
 
-    async def start(self, task_input: str) -> Tuple[str, str | None, dict | None]:
-        self.task_output = task_input
-        print(
-            f"{self.name} task completed. Its output is: {self.task_output}. It is the final task."
+    async def start(self, task_input: str) -> TaskOutput:
+        self.task_output = TaskOutput(
+            task_type=self,
+            content=(task_input,),
         )
-        return self.task_output, None, None
+        print(
+            f"{self.name} task completed. Its output is: {self.task_output.content}. It is the final task."
+        )
+        return self.task_output
 
 
 class Task(BaseModel):
@@ -76,7 +98,15 @@ class Task(BaseModel):
     name: str = Field(default=None)
     description: str = Field(default=None)
     task_input: str = Field(default=None)  # TODO: List[str] for parallel tasks
-    task_output: Optional[Tuple[str, str, Optional[dict]]] = Field(default=None)
+    task_output: Optional[TaskOutput] = Field(
+        description="""content = (
+                                    self.actor.get_final_result(),              # str
+                                    self.allocator.get_final_result(),          # str
+                                    self.allocator.get_subtask_result_dict()    # dictionary
+                                )
+        """,
+        default=None,
+    )
     allocator: Allocator = Field(default=None)
     actor: Actor = Field(default=None)
     tools: Optional[List[BaseToolWithState]] = Field(
@@ -86,9 +116,9 @@ class Task(BaseModel):
     task_graph_context: Optional[List["Task"]] = Field(
         description="",
         default_factory=list,
-    )
+    )  # TODO:
 
-    async def start(self, task_input: str) -> str:
+    async def start(self, task_input: str) -> TaskOutput:
         runtime = SingleThreadedAgentRuntime()
         client = create_completion_client_from_env()
 
@@ -130,10 +160,13 @@ class Task(BaseModel):
             topic_id=DefaultTopicId(),
         )
         await runtime.stop_when_idle()
-        self.task_output = (
-            self.actor.get_final_result(),
-            self.allocator.get_final_result(),  # str
-            self.allocator.get_subtask_result_dict(),  # dict for decomposition mode and sub-tasks
+        self.task_output = TaskOutput(
+            task_type=self,
+            content=(
+                self.actor.get_final_result(),  # str
+                self.allocator.get_final_result(),  # str
+                self.allocator.get_subtask_result_dict(),  # dict for decomposition mode and sub-tasks
+            ),
         )
         print(f"{self.name} task completed.")
         return self.task_output
