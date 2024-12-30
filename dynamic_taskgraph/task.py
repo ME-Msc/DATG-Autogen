@@ -27,24 +27,24 @@ class AlphaTask(BaseModel):  # | GenesisTask
 
     name: str = "alpha_task"
     description: str = "Virtual Task for processing input of Task Graph."
-    task_output: Optional[Tuple[str, str | None]] = Field(
+    task_output: Optional[Tuple[str, str | None, dict | None]] = Field(
         description="tuple(user input, summary of user input as default task name)",
         default=None,
     )  # TODO: unify the type of task_output for all tasks
 
-    async def start(self) -> Tuple[str, str]:
+    async def start(self) -> Tuple[str, str, dict | None]:
         try:
             user_input = await asyncio.to_thread(input, "User input ('exit' to quit): ")
             user_input = user_input.strip()
             if user_input == "exit":
                 raise asyncio.CancelledError()
-            client = create_completion_client_from_env()
+            client = create_completion_client_from_env(model="gpt-4o-mini", api_key="sk-BlM8XlTT7VXchhrc1Gxl5YYNP2SuocWEv7u5ON1usav73e8v", base_url="https://api.chatanywhere.tech/v1")
             default_taskname = await client.create(
                 messages=ALPHA_TASK_SYSTEM_MESSAGES
                 + [UserMessage(content=user_input, source="UserProxy")]
             )
             assert isinstance(default_taskname.content, str)
-            self.task_output = user_input, default_taskname.content
+            self.task_output = user_input, default_taskname.content, None
             return self.task_output
         except asyncio.CancelledError:
             print("Task has been cancelled.")
@@ -55,14 +55,14 @@ class OmegaTask(BaseModel):
 
     name: str = "omega_task"
     description: str = "Virtual Task for processing output of Task Graph."
-    task_output: Optional[str] = Field(description="task graph output", default=None)
+    task_output: Optional[Tuple[str, str | None, dict | None]] = Field(description="task graph output", default=None)
 
-    async def start(self, task_input: str) -> Tuple[str, str | None]:
+    async def start(self, task_input: str) -> Tuple[str, str | None, dict | None]:
         self.task_output = task_input
         print(
             f"{self.name} task completed. Its output is: {self.task_output}. It is the final task."
         )
-        return self.task_output, None
+        return self.task_output, None, None
 
 
 class Task(BaseModel):
@@ -74,7 +74,7 @@ class Task(BaseModel):
     name: str = Field(default=None)
     description: str = Field(default=None)
     task_input: str = Field(default=None)  # TODO: List[str] for parallel tasks
-    task_output: Optional[str] = Field(default=None)
+    task_output: Optional[Tuple[str, str, Optional[dict]]] = Field(default=None)
     allocator: Allocator = Field(default=None)
     actor: Actor = Field(default=None)
     tools: Optional[List[BaseToolWithState]] = Field(
@@ -88,7 +88,7 @@ class Task(BaseModel):
 
     async def start(self, task_input: str) -> str:
         runtime = SingleThreadedAgentRuntime()
-        client = create_completion_client_from_env()
+        client = create_completion_client_from_env(model="gpt-4o-mini", api_key="sk-BlM8XlTT7VXchhrc1Gxl5YYNP2SuocWEv7u5ON1usav73e8v", base_url="https://api.chatanywhere.tech/v1")
 
         # actor
         await Actor.register(
@@ -130,7 +130,8 @@ class Task(BaseModel):
         await runtime.stop_when_idle()
         self.task_output = (
             self.actor.get_final_result(),
-            self.allocator.get_final_result(),
+            self.allocator.get_final_result(),  # str
+            self.allocator.get_dict_result(),   # dict for decomposition mode and sub-tasks
         )
         print(f"{self.name} task completed.")
         return self.task_output

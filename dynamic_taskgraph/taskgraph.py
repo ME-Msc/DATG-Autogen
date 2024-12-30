@@ -194,7 +194,7 @@ class TaskGraph:
 
                 omega_task_name = waiting_list[-1]
                 omega_task: OmegaTask = self.graph[omega_task_name].task
-                alpha_task_output, first_task_name = await alpha_task.start()
+                alpha_task_output, first_task_name, _ = await alpha_task.start()
 
                 input_dict[omega_task_name] = alpha_task_output
 
@@ -214,7 +214,7 @@ class TaskGraph:
                     except KeyError:
                         raise KeyError(f"Task {current_task_name} has no input.")
 
-                    current_task_output, _ = await current_task.start(
+                    current_task_output, _, _ = await current_task.start(
                         task_input=current_task_input
                     )
                     for successor_task_name in self.graph[current_task_name].out_edges:
