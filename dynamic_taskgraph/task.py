@@ -38,7 +38,7 @@ class AlphaTask(BaseModel):  # | GenesisTask
             user_input = user_input.strip()
             if user_input == "exit":
                 raise asyncio.CancelledError()
-            client = create_completion_client_from_env(model="gpt-4o-mini", api_key="sk-BlM8XlTT7VXchhrc1Gxl5YYNP2SuocWEv7u5ON1usav73e8v", base_url="https://api.chatanywhere.tech/v1")
+            client = create_completion_client_from_env()
             default_taskname = await client.create(
                 messages=ALPHA_TASK_SYSTEM_MESSAGES
                 + [UserMessage(content=user_input, source="UserProxy")]
@@ -55,7 +55,9 @@ class OmegaTask(BaseModel):
 
     name: str = "omega_task"
     description: str = "Virtual Task for processing output of Task Graph."
-    task_output: Optional[Tuple[str, str | None, dict | None]] = Field(description="task graph output", default=None)
+    task_output: Optional[Tuple[str, str | None, dict | None]] = Field(
+        description="task graph output", default=None
+    )
 
     async def start(self, task_input: str) -> Tuple[str, str | None, dict | None]:
         self.task_output = task_input
@@ -88,7 +90,7 @@ class Task(BaseModel):
 
     async def start(self, task_input: str) -> str:
         runtime = SingleThreadedAgentRuntime()
-        client = create_completion_client_from_env(model="gpt-4o-mini", api_key="sk-BlM8XlTT7VXchhrc1Gxl5YYNP2SuocWEv7u5ON1usav73e8v", base_url="https://api.chatanywhere.tech/v1")
+        client = create_completion_client_from_env()
 
         # actor
         await Actor.register(
@@ -131,7 +133,7 @@ class Task(BaseModel):
         self.task_output = (
             self.actor.get_final_result(),
             self.allocator.get_final_result(),  # str
-            self.allocator.get_dict_result(),   # dict for decomposition mode and sub-tasks
+            self.allocator.get_subtask_result_dict(),  # dict for decomposition mode and sub-tasks
         )
         print(f"{self.name} task completed.")
         return self.task_output

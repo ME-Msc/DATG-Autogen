@@ -11,8 +11,8 @@ from dynamic_taskgraph.prompts.allocator_prompts import (
     ALLOCATOR_DESCRIPTION,
     ALLOCATOR_SYSTEM_MESSAGES,
 )
+from dynamic_taskgraph.prompts.prompts_parser import content_to_dictionary
 
-from dynamic_taskgraph.test.get_json import get_json
 
 @default_subscription
 class Allocator(BaseWorker):
@@ -46,10 +46,6 @@ class Allocator(BaseWorker):
 
     def get_final_result(self):
         return self._chat_history[-1].content
-    
-    def get_dict_result(self):
-        result = get_json(self._chat_history[-1].content)
-        print("~~~~~~~~~~~~~~~~~~~~~~~~~")
-        print(result)
-        print("~~~~~~~~~~~~~~~~~~~~~~~~~")
-        return result
+
+    def get_subtask_result_dict(self):
+        return content_to_dictionary(self._chat_history[-1].content)

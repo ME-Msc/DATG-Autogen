@@ -174,7 +174,9 @@ class TaskGraph:
         nx.draw_networkx_edges(G, pos, arrows=True, arrowsize=20)
 
         # Check if the directory exists, if not, create it
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        directory = os.path.dirname(filename)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
 
         plt.savefig(filename)  # Save the visualization as a file
         plt.close()
