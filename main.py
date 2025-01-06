@@ -15,7 +15,7 @@ async def main():
     task_graph.add_node(task=alpha_task)
     task_graph.add_node(task=omega_task)
     task_graph.add_edge(from_task=alpha_task, to_task=omega_task)
-    await task_graph.run(max_rounds=2)
+    await task_graph.run(max_rounds=3)
 
 
 def test_taskGraph():

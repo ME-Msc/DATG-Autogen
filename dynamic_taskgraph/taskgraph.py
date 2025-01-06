@@ -1,6 +1,5 @@
 import os
 from collections import OrderedDict, defaultdict
-from copy import deepcopy
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt
@@ -65,7 +64,7 @@ class TaskGraph:
             raise KeyError(f"Node {to_task.name} do not exist in the graph")
 
         # Check for cycles by temporarily adding the edge
-        test_graph = deepcopy(self.graph)
+        test_graph = self.graph.copy()
         test_graph[from_task.name].out_edges.add(to_task.name)
         test_graph[to_task.name].in_edges.add(from_task.name)
         is_valid, _ = self.validate()
@@ -77,13 +76,8 @@ class TaskGraph:
 
     def delete_edge(self, from_task: Task, to_task: Task) -> None:
         """Delete an edge from the graph."""
-        if (
-            to_task.name
-            not in self.graph.get(from_task.name, TaskGraphNode(from_task)).out_edges
-        ):
-            raise KeyError(
-                f"Edge from {from_task.name} to {to_task.name} does not exist"
-            )
+        if to_task.name not in self.graph.get(from_task.name, TaskGraphNode(from_task)).out_edges:
+            raise KeyError(f"Edge from {from_task.name} to {to_task.name} does not exist")
         self.graph[from_task.name].out_edges.remove(to_task.name)
         self.graph[to_task.name].in_edges.remove(from_task.name)
 
@@ -96,11 +90,7 @@ class TaskGraph:
             for successor_name in node.out_edges:
                 in_degree[successor_name] += 1
 
-        ready = [
-            node.task.name
-            for node in self.graph.values()
-            if in_degree[node.task.name] == 0
-        ]
+        ready = [node.task.name for node in self.graph.values() if in_degree[node.task.name] == 0]
         result = []
 
         while ready:
@@ -137,11 +127,7 @@ class TaskGraph:
                 nodes_seen_names.add(current_task_name)
                 nodes_to_visit_names.extend(self.graph[current_task_name].out_edges)
 
-        return [
-            node_name
-            for node_name in self.topological_sort()
-            if node_name in nodes_seen_names
-        ]
+        return [node_name for node_name in self.topological_sort() if node_name in nodes_seen_names]
 
     def visualize(self, filename: str = "figures/TaskGraph.png") -> None:
         """Visualize the graph using matplotlib and networkx."""
@@ -166,9 +152,7 @@ class TaskGraph:
                 label,
                 ha="center",
                 va="center",
-                bbox=dict(
-                    boxstyle="round,pad=0.3", edgecolor="black", facecolor="skyblue"
-                ),
+                bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="skyblue"),
             )
 
         nx.draw_networkx_edges(G, pos, arrows=True, arrowsize=20)
@@ -195,12 +179,13 @@ class TaskGraph:
 
                 omega_task_name = waiting_list[-1]
                 omega_task: OmegaTask = self.graph[omega_task_name].task
+
                 alpha_task_output = await alpha_task.start()
                 first_task_input, first_task_name = alpha_task_output.content
 
-                input_dict[omega_task_name] = (
-                    first_task_input  # will be override in next round
-                )
+                input_dict[alpha_task_name] = first_task_input
+                input_dict[omega_task_name] = first_task_input
+                # input_dict[omega_task_name] will be override in next round
 
                 first_task = Task(name=first_task_name)
                 self.add_node(task=first_task)
@@ -213,27 +198,60 @@ class TaskGraph:
                     current_task = self.graph[current_task_name].task
                     if isinstance(current_task, AlphaTask):
                         continue
-                    try:
+                    elif isinstance(current_task, OmegaTask):
                         current_task_input = input_dict[current_task_name]
-                    except KeyError:
-                        raise KeyError(f"Task {current_task_name} has no input.")
+                        await current_task.start(task_input=current_task_input)
+                    else:  # current_task is Task
+                        current_task_input = input_dict[current_task_name]
 
-                    current_task_output = await current_task.start(
-                        task_input=current_task_input
-                    )
-                    if isinstance(current_task_output.task_type, AlphaTask):
-                        successor_task_input = current_task_output.content[0]
-                        # user_input
-                    elif isinstance(current_task_output.task_type, Task):
-                        successor_task_input = (
-                            current_task_output.content[0]
-                            + current_task_output.content[1]
-                        )
-                        # actor.get_final_result() + allocator.get_final_result()  # str + str
-                    elif isinstance(current_task_output.task_type, OmegaTask):
-                        successor_task_input = current_task_output.content[0]
-                        # Omega_task_input # str, in fact there is no successor_task any more.
+                        # FIXME: for previous_task_name in self.graph[current_task_name].in_edges[0]:
+                        previous_task_name = next(iter(self.graph[current_task_name].in_edges))
+                        previous_task = self.graph[previous_task_name].task
+                        next_task_name = next(iter(self.graph[current_task_name].out_edges))
+                        next_task = self.graph[next_task_name].task
 
-                    for successor_task_name in self.graph[current_task_name].out_edges:
-                        input_dict[successor_task_name] = successor_task_input
-                print(f"TaskGraph round {i} execution completed.")
+                        current_task_output = await current_task.start(task_input=current_task_input)
+                        decomposition_result = current_task_output.content[2]
+                        if decomposition_result["satisfaction_decision"]:  # True
+                            # actor.output
+                            next_task_input = current_task_output.content[0]
+                            for next_task_name in self.graph[current_task_name].out_edges:
+                                input_dict[next_task_name] = next_task_input
+                        else:  # "satisfaction_decision" = False
+                            sub_tasks = decomposition_result["sub_tasks"]
+                            sub_task_1 = Task(
+                                name=sub_tasks[0]["name"],
+                                description=sub_tasks[0]["description"],
+                            )
+                            self.add_node(task=sub_task_1)
+                            input_dict[sub_task_1.name] = current_task_input + sub_task_1.description
+
+                            sub_task_2 = Task(
+                                name=sub_tasks[1]["name"],
+                                description=sub_tasks[1]["description"],
+                            )
+                            self.add_node(task=sub_task_2)
+                            input_dict[sub_task_1.name] = current_task_input + sub_task_2.description
+
+                            if decomposition_result["decomposition_mode"] == "Sequential":
+                                self.add_edge(
+                                    from_task=previous_task,
+                                    to_task=sub_task_1,
+                                )
+                                self.add_edge(from_task=sub_task_1, to_task=sub_task_2)
+                                self.add_edge(from_task=sub_task_2, to_task=next_task)
+                                self.delete_node(task=current_task)  # delete_edges for node automatically
+                            else:  # ["decomposition_mode"] == "Parallel"
+                                self.add_edge(
+                                    from_task=previous_task,
+                                    to_task=sub_task_1,
+                                )
+                                self.add_edge(from_task=sub_task_1, to_task=next_task)
+                                self.add_edge(
+                                    from_task=previous_task,
+                                    to_task=sub_task_2,
+                                )
+                                self.add_edge(from_task=sub_task_2, to_task=next_task)
+                                self.delete_node(task=current_task)
+
+            print(f"TaskGraph round {i} execution completed.")
