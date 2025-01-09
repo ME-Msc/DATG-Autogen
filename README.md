@@ -39,5 +39,5 @@ CHAT_COMPLETION_KWARGS_JSON={"api_key": "REPLACE_WITH_YOUR_API", "model": "gpt-4
 ## Run
 
 ```shell
-/workspaces/autogen/python/.venv/bin/python /sandbox/autogen-magenticOne.py --logs_dir ./logs
+python main.py
 ```
