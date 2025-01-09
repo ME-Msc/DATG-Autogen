@@ -1,6 +1,6 @@
-# DMAF
+# DATG-Autogen
 
-Dynamic Multi-Agent Framework
+Directed Acyclic Task Graph based on Autogen
 
 ## Dependencies
 
